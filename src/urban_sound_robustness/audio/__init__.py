@@ -5,6 +5,14 @@ from urban_sound_robustness.audio.loading import (
     LoadedAudio,
     load_audio,
 )
+from urban_sound_robustness.audio.noise import (
+    NoiseMixingError,
+    SNRMixResult,
+    match_noise_length,
+    measure_snr_db,
+    mix_waveforms_at_snr,
+    waveform_power,
+)
 from urban_sound_robustness.audio.preprocessing import (
     AudioPreprocessor,
     AudioPreprocessingError,
@@ -24,12 +32,18 @@ __all__ = [
     "AudioPreprocessingError",
     "LogMelFeatureExtractor",
     "MFCCFeatureExtractor",
+    "NoiseMixingError",
+    "SNRMixResult",
     "LoadedAudio",
     "PreprocessedAudio",
     "convert_to_mono",
     "load_audio",
+    "match_noise_length",
+    "measure_snr_db",
+    "mix_waveforms_at_snr",
     "normalize_waveform_duration",
     "normalize_waveform_length",
     "resample_waveform",
     "standardize_features",
+    "waveform_power",
 ]

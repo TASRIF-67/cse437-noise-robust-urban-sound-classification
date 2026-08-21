@@ -8,6 +8,12 @@
 Dataset and audio contents are intentionally ignored by Git. External noise files
 must never be exposed as classification targets.
 
+The deterministic corruption loader searches `external_noise/` recursively for
+`.wav`, `.flac`, and `.ogg` files. This directory is intentionally empty in the
+repository. Add a properly licensed noise-only collection before research
+evaluation; seeded synthetic white noise is used only by the inspection CLI to
+verify mathematics and is not a substitute for the research noise dataset.
+
 UrbanSound8K is expected at:
 
 ```text

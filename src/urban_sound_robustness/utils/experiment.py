@@ -62,7 +62,7 @@ def build_experiment_id(
 
     safe_parts = [_to_safe_identifier(part) for part in parts]
     current_time = datetime.now(timezone.utc) if timestamp is None else timestamp
-    timestamp_text = current_time.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp_text = current_time.astimezone(timezone.utc).strftime("%Y%m%dt%H%M%Sz")
     safe_parts.append(timestamp_text)
     return "_".join(safe_parts)
 

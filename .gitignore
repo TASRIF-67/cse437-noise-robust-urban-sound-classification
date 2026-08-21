@@ -57,6 +57,7 @@ results/predictions/*
 !results/predictions/.gitkeep
 results/preprocessing_inspection/
 results/preprocessing_training_smoke/
+results/snr_inspection/
 
 # TensorBoard event files and model artifacts outside standard directories
 events.out.tfevents.*

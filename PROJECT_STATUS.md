@@ -23,8 +23,7 @@ validate, and inspect it. Run every command from the repository root:
 - Verified 8,732 readable files, zero missing files, zero unreadable files,
   10 classes, 10 folds, and approximately 8.75 hours of audio.
 - Added fixture tests for dataset validation, inspection, report storage, and
-  resumable lossless Parquet-to-WAV reconstruction. The current suite has 60
-  passing tests.
+  resumable lossless Parquet-to-WAV reconstruction.
 - Implemented Step 1 of audio preprocessing: validated waveform loading that
   preserves source channels, frames, and sample rate as a float32 PyTorch tensor.
 - Implemented Step 2 of audio preprocessing: deterministic channel averaging to
@@ -41,6 +40,23 @@ validate, and inspect it. Run every command from the repository root:
   baseline.
 - Created and executed `notebooks/01_urbansound8k_eda.ipynb` against the complete
   dataset inventory. It generated seven research figures and five CSV/JSON outputs.
+- Implemented mean-square-power SNR mixing, deterministic external-noise file and
+  segment selection, short-noise repetition, long-noise cropping, and explicit
+  silence policies.
+- Added an SNR inspection CLI that generates numerical reports, comparison plots,
+  and byte-reproducible PCM-24 listening examples.
+- Implemented independent waveform and spectrogram augmentation switches with
+  strict training-only application.
+- Implemented common-logit CNN, CRNN/BiGRU, and torchvision ResNet18 classifiers.
+- Implemented reusable epoch loops, CrossEntropyLoss, Adam/AdamW, schedulers,
+  mixed precision, checkpointing, early stopping, CSV history, and TensorBoard.
+- Implemented accuracy, macro and per-class metrics, confusion matrices,
+  prediction storage, and derived robustness metrics.
+- Added all six baseline/augmented experiment manifests and a reusable training
+  CLI with bounded smoke-run options.
+- Verified the real-audio path with one epoch over 8 training and 4 validation
+  clips on the GTX 1660 Ti. This verifies execution only, not model quality.
+- The complete automated suite now has 110 passing tests.
 
 ## Current dataset findings
 
@@ -186,11 +202,35 @@ results/metrics/eda/duration_summary_by_class.csv
 results/metrics/eda/representative_samples.csv
 ```
 
+## Controlled SNR commands
+
+| Command | What it does |
+|---|---|
+| `python scripts\inspect_snr.py` | Applies clean, 20 dB, 10 dB, and 0 dB conditions to one held-out clip using seeded synthetic noise for mathematical inspection. |
+| `python scripts\inspect_snr.py --noise-file data\external_noise\example.wav` | Uses a supplied real background-noise recording. |
+| `python scripts\inspect_snr.py --split validation --sample-index 10 --seed 2025` | Selects another configured sample while retaining a reproducible corruption seed. |
+| `python scripts\inspect_snr.py --help` | Displays all CLI options. |
+
+Default outputs are:
+
+```text
+results/snr_inspection/clean.wav
+results/snr_inspection/snr_20db.wav
+results/snr_inspection/snr_10db.wav
+results/snr_inspection/snr_0db.wav
+results/snr_inspection/condition_results.csv
+results/snr_inspection/summary.json
+results/snr_inspection/waveform_comparison.png
+```
+
+The current real-sample smoke check reached every requested SNR within
+`4.1e-7 dB`. Repeated runs produced identical CSV and PCM-24 WAV hashes.
+
 ## Development verification commands
 
 | Command | What it does |
 |---|---|
-| `python -m pytest -v` | Runs the complete automated test suite with individual test names. Current expected result: 60 passed. |
+| `python -m pytest -v` | Runs the complete automated test suite with individual test names. Current expected result: 110 passed. |
 | `python -m compileall -q src scripts tests` | Compiles project Python files to catch syntax errors without running experiments. |
 | `python -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"` | Displays the PyTorch build and confirms whether CUDA and the GPU are available. |
 
@@ -216,5 +256,56 @@ results/metrics/eda/representative_samples.csv
 6. Save publication-ready figures and supporting CSV/JSON data. **Completed.**
 7. Execute every notebook cell inside `.venv` with no errors. **Completed.**
 
-Controlled noise corruption and augmentation are the next phase, followed by
-models, training, and robustness evaluation.
+## Completed controlled SNR phase
+
+1. Implement mathematically correct mean-square-power noise scaling. **Completed.**
+2. Verify configured 20, 10, and 0 dB conditions numerically. **Completed.**
+3. Handle silent signals and near-zero noise explicitly. **Completed.**
+4. Repeat short noise and deterministically crop long noise. **Completed.**
+5. Select noise files and segments reproducibly from sample IDs. **Completed.**
+6. Preserve the same underlying noise segment across SNR conditions. **Completed.**
+7. Generate listening, plotting, CSV, and JSON inspection artifacts. **Completed.**
+
+## Phase 3 methodology commands
+
+| Command | What it does |
+|---|---|
+| `python scripts\check_config.py configs\experiment\cnn_baseline.yaml` | Validates one of the six complete manifests. Substitute another manifest filename as needed. |
+| `python scripts\train.py configs\experiment\development.yaml --epochs 1 --max-train-samples 8 --max-validation-samples 4 --num-workers 0 --run-label smoke` | Repeats the verified smoke training without treating its tiny-sample metrics as research results. |
+| `python scripts\train.py configs\experiment\cnn_baseline.yaml --run-label run01` | Starts a complete CNN baseline run with folds 1-8 for training and fold 9 for validation. |
+| `python scripts\train.py --help` | Shows sample limits, batch limits, device, worker, epoch, label, and exact experiment-ID options. |
+
+Each training run writes:
+
+```text
+experiments/<experiment-id>/config.yaml
+experiments/<experiment-id>/environment.json
+experiments/<experiment-id>/run_summary.json
+checkpoints/<experiment-id>/best.pt
+checkpoints/<experiment-id>/last.pt
+logs/<experiment-id>/training.log
+logs/<experiment-id>/tensorboard/
+results/metrics/<experiment-id>/training_history.csv
+results/metrics/<experiment-id>/validation/summary.json
+results/metrics/<experiment-id>/validation/per_class_metrics.csv
+results/metrics/<experiment-id>/validation/confusion_matrix.csv
+results/metrics/<experiment-id>/validation/predictions.csv
+```
+
+## Completed Phase 3 methodology
+
+1. Time shift, gain, background noise, frequency mask, and time mask. **Completed.**
+2. Validation/test augmentation bypass and deterministic augmentation tests. **Completed.**
+3. CNN, CRNN with BiGRU, and single-channel ResNet18 implementations. **Completed.**
+4. Shared model factory and common [batch, classes] logits interface. **Completed.**
+5. Training, validation, optimization, scheduling, history, logging,
+   checkpointing, and early stopping. **Completed.**
+6. Overall, macro, per-class, confusion-matrix, prediction, and robustness
+   evaluation storage. **Completed.**
+7. Six required baseline/augmented manifests. **Completed.**
+8. Configuration/environment snapshots and non-overwriting experiment IDs. **Completed.**
+9. Tiny real-data end-to-end smoke training. **Completed.**
+
+Phase 3 infrastructure is complete. Remaining research work begins with obtaining
+a licensed external-noise collection, then running and evaluating the six full
+experiments. Those expensive runs were intentionally not started.

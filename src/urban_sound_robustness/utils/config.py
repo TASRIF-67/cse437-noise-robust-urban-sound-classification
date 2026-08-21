@@ -500,10 +500,79 @@ def _validate_audio(settings: Mapping[str, Any]) -> None:
 
 
 def _validate_augmentation(settings: Mapping[str, Any]) -> None:
+    _require_non_empty_string(settings, "name", "augmentation")
     if not isinstance(settings.get("enabled"), bool):
         raise ConfigurationError("'augmentation.enabled' must be true or false.")
 
     _validate_probability_values(settings, "augmentation")
+    waveform = _require_mapping(settings, "waveform", "augmentation")
+    spectrogram = _require_mapping(settings, "spectrogram", "augmentation")
+    components = {
+        "time_shift": _require_mapping(waveform, "time_shift", "augmentation.waveform"),
+        "random_gain": _require_mapping(waveform, "random_gain", "augmentation.waveform"),
+        "background_noise": _require_mapping(
+            waveform, "background_noise", "augmentation.waveform"
+        ),
+        "pitch_shift": _require_mapping(waveform, "pitch_shift", "augmentation.waveform"),
+        "time_stretch": _require_mapping(waveform, "time_stretch", "augmentation.waveform"),
+        "frequency_mask": _require_mapping(
+            spectrogram, "frequency_mask", "augmentation.spectrogram"
+        ),
+        "time_mask": _require_mapping(
+            spectrogram, "time_mask", "augmentation.spectrogram"
+        ),
+    }
+    for name, component in components.items():
+        if not isinstance(component.get("enabled"), bool):
+            raise ConfigurationError(
+                f"'augmentation.{name}.enabled' must be true or false."
+            )
+
+    for unsupported_name in ("pitch_shift", "time_stretch"):
+        if components[unsupported_name]["enabled"]:
+            raise ConfigurationError(
+                f"'augmentation.waveform.{unsupported_name}' is not currently supported."
+            )
+
+    if components["time_shift"]["enabled"]:
+        maximum_shift = components["time_shift"].get("max_shift_fraction")
+        if (
+            isinstance(maximum_shift, bool)
+            or not isinstance(maximum_shift, (int, float))
+            or not 0 <= maximum_shift <= 1
+        ):
+            raise ConfigurationError("'max_shift_fraction' must be between zero and one.")
+    if components["random_gain"]["enabled"]:
+        minimum_gain = components["random_gain"].get("min_gain_db")
+        maximum_gain = components["random_gain"].get("max_gain_db")
+        if not all(
+            isinstance(value, (int, float)) and not isinstance(value, bool)
+            for value in (minimum_gain, maximum_gain)
+        ) or minimum_gain > maximum_gain:
+            raise ConfigurationError("Random-gain dB bounds must be ordered numbers.")
+    if components["background_noise"]["enabled"]:
+        _require_non_empty_string(
+            components["background_noise"],
+            "noise_directory",
+            "augmentation.waveform.background_noise",
+        )
+        minimum_snr = components["background_noise"].get("min_snr_db")
+        maximum_snr = components["background_noise"].get("max_snr_db")
+        if not all(
+            isinstance(value, (int, float)) and not isinstance(value, bool)
+            for value in (minimum_snr, maximum_snr)
+        ) or minimum_snr > maximum_snr:
+            raise ConfigurationError("Background-noise SNR bounds must be ordered numbers.")
+    for mask_name, width_name in (
+        ("frequency_mask", "max_mask_bins"),
+        ("time_mask", "max_mask_frames"),
+    ):
+        if components[mask_name]["enabled"]:
+            width = components[mask_name].get(width_name)
+            if isinstance(width, bool) or not isinstance(width, int) or width < 1:
+                raise ConfigurationError(
+                    f"'augmentation.{mask_name}.{width_name}' must be a positive integer."
+                )
 
 
 def _validate_probability_values(values: Mapping[str, Any], location: str) -> None:
@@ -526,12 +595,48 @@ def _validate_model(
     model_settings: Mapping[str, Any],
     dataset_settings: Mapping[str, Any],
 ) -> None:
-    _require_non_empty_string(model_settings, "name", "model")
+    model_name = _require_non_empty_string(model_settings, "name", "model").lower()
+    if model_name not in {"cnn", "crnn", "resnet18"}:
+        raise ConfigurationError("'model.name' must be cnn, crnn, or resnet18.")
 
     if model_settings.get("num_classes") != dataset_settings.get("num_classes"):
         raise ConfigurationError(
             "'model.num_classes' must match 'dataset.num_classes'."
         )
+    input_channels = model_settings.get("input_channels")
+    if isinstance(input_channels, bool) or not isinstance(input_channels, int) or input_channels < 1:
+        raise ConfigurationError("'model.input_channels' must be a positive integer.")
+    dropout = model_settings.get("dropout")
+    if (
+        isinstance(dropout, bool)
+        or not isinstance(dropout, (int, float))
+        or not 0 <= dropout < 1
+    ):
+        raise ConfigurationError("'model.dropout' must be between zero and one.")
+
+    channel_key = "channels" if model_name == "cnn" else "cnn_channels"
+    if model_name in {"cnn", "crnn"}:
+        channels = model_settings.get(channel_key)
+        if not isinstance(channels, list) or not channels or not all(
+            isinstance(value, int) and not isinstance(value, bool) and value > 0
+            for value in channels
+        ):
+            raise ConfigurationError(
+                f"'model.{channel_key}' must be a non-empty list of positive integers."
+            )
+    if model_name == "crnn":
+        if model_settings.get("recurrent_type") != "gru":
+            raise ConfigurationError("'model.recurrent_type' must currently be gru.")
+        for key in ("recurrent_hidden_size", "recurrent_layers"):
+            value = model_settings.get(key)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ConfigurationError(f"'model.{key}' must be a positive integer.")
+        if not isinstance(model_settings.get("bidirectional"), bool):
+            raise ConfigurationError("'model.bidirectional' must be true or false.")
+    if model_name == "resnet18" and not isinstance(
+        model_settings.get("pretrained"), bool
+    ):
+        raise ConfigurationError("'model.pretrained' must be true or false.")
 
 
 def _validate_training(settings: Mapping[str, Any]) -> None:
@@ -549,6 +654,9 @@ def _validate_training(settings: Mapping[str, Any]) -> None:
 
     for key in ("epochs", "batch_size", "gradient_accumulation_steps"):
         _require_positive_number(settings, key, "training")
+        value = settings.get(key)
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ConfigurationError(f"'training.{key}' must be a positive integer.")
 
     num_workers = settings.get("num_workers")
 
@@ -557,6 +665,39 @@ def _validate_training(settings: Mapping[str, Any]) -> None:
 
     if "deterministic" in settings and not isinstance(settings["deterministic"], bool):
         raise ConfigurationError("'training.deterministic' must be true or false.")
+    for boolean_name in ("pin_memory", "mixed_precision"):
+        if not isinstance(settings.get(boolean_name), bool):
+            raise ConfigurationError(f"'training.{boolean_name}' must be true or false.")
+
+    loss = _require_mapping(settings, "loss", "training")
+    if loss.get("name") != "cross_entropy":
+        raise ConfigurationError("'training.loss.name' must be cross_entropy.")
+    optimizer = _require_mapping(settings, "optimizer", "training")
+    if optimizer.get("name") not in {"adam", "adamw"}:
+        raise ConfigurationError("'training.optimizer.name' must be adam or adamw.")
+    _require_positive_number(optimizer, "learning_rate", "training.optimizer")
+    weight_decay = optimizer.get("weight_decay", 0.0)
+    if (
+        isinstance(weight_decay, bool)
+        or not isinstance(weight_decay, (int, float))
+        or weight_decay < 0
+    ):
+        raise ConfigurationError("'training.optimizer.weight_decay' cannot be negative.")
+
+    scheduler = _require_mapping(settings, "scheduler", "training")
+    if scheduler.get("name") not in {"none", "reduce_on_plateau", "cosine"}:
+        raise ConfigurationError("Unsupported training scheduler.")
+    early_stopping = _require_mapping(settings, "early_stopping", "training")
+    checkpointing = _require_mapping(settings, "checkpointing", "training")
+    logging_settings = _require_mapping(settings, "logging", "training")
+    for location, values, key in (
+        ("early_stopping", early_stopping, "enabled"),
+        ("checkpointing", checkpointing, "save_best"),
+        ("checkpointing", checkpointing, "save_last"),
+        ("logging", logging_settings, "tensorboard"),
+    ):
+        if not isinstance(values.get(key), bool):
+            raise ConfigurationError(f"'training.{location}.{key}' must be true or false.")
 
 
 def _validate_evaluation(settings: Mapping[str, Any]) -> None:
@@ -613,3 +754,7 @@ def _validate_evaluation(settings: Mapping[str, Any]) -> None:
         raise ConfigurationError(
             "Evaluation conditions must contain exactly one clean condition with null SNR."
         )
+
+    _require_non_empty_string(settings, "noise_directory", "evaluation")
+    mixing = _require_mapping(settings, "mixing", "evaluation")
+    _require_positive_number(mixing, "power_epsilon", "evaluation.mixing")

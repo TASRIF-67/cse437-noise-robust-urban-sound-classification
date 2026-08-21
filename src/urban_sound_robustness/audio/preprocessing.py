@@ -368,6 +368,37 @@ class AudioPreprocessor(nn.Module):
         """Return the exact waveform length produced by this preprocessor."""
         return round(self.sample_rate * self.clip_duration_seconds)
 
+    def prepare_waveform(
+        self,
+        waveform: Tensor,
+        source_sample_rate: int,
+        *,
+        training: bool | None = None,
+        generator: torch.Generator | None = None,
+    ) -> Tensor:
+        """Apply channel, sample-rate, and duration normalization only."""
+        _validate_waveform(waveform)
+        processed = convert_to_mono(waveform) if self.mono else waveform
+        processed = resample_waveform(
+            processed,
+            source_sample_rate=source_sample_rate,
+            target_sample_rate=self.sample_rate,
+        )
+        use_training_crop = self.training if training is None else training
+        crop_mode = self.training_crop if use_training_crop else self.evaluation_crop
+        return normalize_waveform_duration(
+            processed,
+            sample_rate=self.sample_rate,
+            duration_seconds=self.clip_duration_seconds,
+            crop_mode=crop_mode,
+            padding_mode=self.padding_mode,
+            generator=generator,
+        )
+
+    def extract_features(self, waveform: Tensor) -> Tensor:
+        """Transform one normalized waveform into model-ready features."""
+        return self.feature_extractor(waveform)
+
     def forward(
         self,
         waveform: Tensor,
@@ -380,24 +411,13 @@ class AudioPreprocessor(nn.Module):
         _validate_waveform(waveform)
         source_num_channels = int(waveform.shape[0])
         source_num_frames = int(waveform.shape[1])
-        processed = convert_to_mono(waveform) if self.mono else waveform
-        processed = resample_waveform(
-            processed,
-            source_sample_rate=source_sample_rate,
-            target_sample_rate=self.sample_rate,
-        )
-
-        use_training_crop = self.training if training is None else training
-        crop_mode = self.training_crop if use_training_crop else self.evaluation_crop
-        processed = normalize_waveform_duration(
-            processed,
-            sample_rate=self.sample_rate,
-            duration_seconds=self.clip_duration_seconds,
-            crop_mode=crop_mode,
-            padding_mode=self.padding_mode,
+        processed = self.prepare_waveform(
+            waveform,
+            source_sample_rate,
+            training=training,
             generator=generator,
         )
-        features = self.feature_extractor(processed)
+        features = self.extract_features(processed)
         return PreprocessedAudio(
             waveform=processed,
             features=features,

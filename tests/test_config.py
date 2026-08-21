@@ -18,6 +18,32 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEVELOPMENT_CONFIG = PROJECT_ROOT / "configs" / "experiment" / "development.yaml"
 
 
+@pytest.mark.parametrize(
+    ("file_name", "model_name", "augmentation_enabled"),
+    [
+        ("cnn_baseline.yaml", "cnn", False),
+        ("cnn_augmented.yaml", "cnn", True),
+        ("crnn_baseline.yaml", "crnn", False),
+        ("crnn_augmented.yaml", "crnn", True),
+        ("resnet18_baseline.yaml", "resnet18", False),
+        ("resnet18_augmented.yaml", "resnet18", True),
+    ],
+)
+def test_methodology_experiment_manifests_compose(
+    file_name: str,
+    model_name: str,
+    augmentation_enabled: bool,
+) -> None:
+    """Every required baseline/augmented model condition must be runnable."""
+    manifest = PROJECT_ROOT / "configs" / "experiment" / file_name
+
+    configuration = load_experiment_config(manifest)
+
+    assert configuration.section("model")["name"] == model_name
+    assert configuration.section("augmentation")["enabled"] is augmentation_enabled
+    assert configuration.section("dataset")["num_classes"] == 10
+
+
 def test_development_configuration_composes_component_files() -> None:
     """The manifest should merge smoke overrides without losing base settings."""
     configuration = load_experiment_config(DEVELOPMENT_CONFIG)
@@ -85,6 +111,30 @@ def test_invalid_audio_preprocessing_configuration_is_rejected(
     configuration = load_experiment_config(DEVELOPMENT_CONFIG)
     invalid_values = deepcopy(configuration.data)
     destination = invalid_values["audio"]
+    for key in path[:-1]:
+        destination = destination[key]
+    destination[path[-1]] = value
+
+    with pytest.raises(ConfigurationError, match=message):
+        validate_project_config(invalid_values)
+
+
+@pytest.mark.parametrize(
+    ("path", "value", "message"),
+    [
+        (("noise_directory",), "", "noise_directory"),
+        (("mixing", "power_epsilon"), 0.0, "power_epsilon"),
+    ],
+)
+def test_invalid_snr_configuration_is_rejected(
+    path: tuple[str, ...],
+    value,
+    message: str,
+) -> None:
+    """Noise locations and numerical thresholds must be valid before evaluation."""
+    configuration = load_experiment_config(DEVELOPMENT_CONFIG)
+    invalid_values = deepcopy(configuration.data)
+    destination = invalid_values["evaluation"]
     for key in path[:-1]:
         destination = destination[key]
     destination[path[-1]] = value

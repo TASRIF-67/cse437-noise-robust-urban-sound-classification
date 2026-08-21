@@ -101,7 +101,7 @@ def test_build_experiment_id_is_readable_and_stable() -> None:
         timestamp=timestamp,
     )
 
-    assert experiment_id == "resnet18_augmented_smoke_run_20260820T083000Z"
+    assert experiment_id == "resnet18_augmented_smoke_run_20260820t083000z"
 
 
 def test_experiment_layout_saves_snapshots_without_overwriting(tmp_path: Path) -> None:
@@ -147,4 +147,3 @@ def sys_executable() -> str:
     import sys
 
     return sys.executable
-
