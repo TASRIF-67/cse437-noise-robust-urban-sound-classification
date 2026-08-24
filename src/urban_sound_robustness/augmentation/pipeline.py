@@ -17,7 +17,7 @@ from urban_sound_robustness.audio import (
     mix_waveforms_at_snr,
     resample_waveform,
 )
-from urban_sound_robustness.evaluation import discover_noise_files
+from urban_sound_robustness.evaluation.corruption import discover_noise_files
 from urban_sound_robustness.utils.paths import resolve_project_path
 
 

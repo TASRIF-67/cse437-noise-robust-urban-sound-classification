@@ -1,0 +1,14 @@
+\section{Discussion}
+
+The completed experiment supports the hypothesis that training-time
+augmentation can reduce degradation under controlled test noise. The magnitude
+was architecture-dependent. ResNet18 showed the largest normalized macro-F1
+SNR-AUC gain (0.1546), while CRNN showed a clean-versus-robustness trade-off:
+its clean macro F1 decreased by 0.0464, but its 0 dB macro F1 increased by
+0.1234.
+
+\DraftingNote{Interpret why model capacity and temporal modeling may produce
+different augmentation responses, but label mechanisms as hypotheses rather
+than proven causes. Discuss the strong ResNet18 0 dB class gains and the
+remaining difficult classes. Relate findings to verified prior work only after
+the bibliography is populated.}

@@ -14,12 +14,20 @@ recursive noise discovery, deterministic per-sample corruption, independently
 switchable augmentation, validation/test augmentation bypass, CNN/CRNN/ResNet18
 output shapes, loss/backpropagation, trainer history, checkpoints, classification
 metrics, result storage, and robustness summaries. The current suite contains
-110 passing tests. Run it verbosely
+121 passing tests. Checkpoint-evaluation coverage additionally rejects smoke and
+non-best checkpoints, permits only the live evaluation protocol to override old
+snapshots, verifies disjoint training/test noise banks, and preserves achieved
+SNR provenance through inference. Run it verbosely
 with:
 
 ```bash
 python -m pytest -v
 ```
 
-The real-audio smoke run is intentionally a CLI verification rather than a unit
-test because the downloaded UrbanSound8K files are not committed to Git.
+Real-audio training and robustness smoke runs are intentionally CLI verifications
+rather than unit tests because UrbanSound8K and MS-SNSD files are not committed.
+An additional deterministic test proves that interrupted/resumed training
+produces exactly the same parameters and history as uninterrupted training.
+Aggregation tests require all six architecture/training variants, verify the
+generated comparison tables and figures, and reject mismatched test-noise
+assignments before research results are combined.

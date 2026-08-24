@@ -45,6 +45,10 @@ def test_classification_result_storage_writes_all_tables(tmp_path: Path) -> None
         tmp_path,
         class_names=["zero", "one"],
         sample_ids=["a.wav", "b.wav"],
+        prediction_metadata={
+            "condition": ["clean", "clean"],
+            "noise_path": ["", ""],
+        },
     )
 
     assert set(paths) == {
@@ -58,6 +62,24 @@ def test_classification_result_storage_writes_all_tables(tmp_path: Path) -> None
         "a.wav",
         "b.wav",
     ]
+    prediction_table = pd.read_csv(paths["predictions"], keep_default_na=False)
+    assert prediction_table["condition"].tolist() == ["clean", "clean"]
+    assert prediction_table["noise_path"].tolist() == ["", ""]
+
+
+def test_classification_result_rejects_reserved_prediction_metadata(
+    tmp_path: Path,
+) -> None:
+    """Corruption provenance cannot overwrite core prediction columns."""
+    result = calculate_classification_metrics([0, 1], [0, 1], ["zero", "one"])
+
+    with pytest.raises(ValueError, match="cannot replace"):
+        save_classification_result(
+            result,
+            tmp_path,
+            class_names=["zero", "one"],
+            prediction_metadata={"target": [99, 99]},
+        )
 
 
 def test_collect_model_predictions_uses_common_batch_structure() -> None:

@@ -73,6 +73,16 @@ python scripts\train.py configs\experiment\cnn_baseline.yaml --run-label run01
 The command creates isolated experiment, checkpoint, log, and metric directories.
 Use `python scripts\train.py --help` for model-independent overrides.
 
+If local power is interrupted, resume the same run from its latest complete
+epoch:
+
+```powershell
+python scripts\train.py configs\experiment\cnn_baseline.yaml --resume checkpoints\<experiment-id>\last.pt
+```
+
+Do not add `--run-label` or `--experiment-id` when resuming. Original sample,
+batch, and worker settings are restored from the checkpoint.
+
 The reproducible dataset-acquisition flow downloads the public Hugging Face
 Parquet snapshot, then reconstructs its embedded WAV bytes into the configured
 layout:
@@ -86,6 +96,63 @@ python scripts/inspect_dataset.py
 `download_urbansound8k.py` is a resumable multi-range fallback for Kaggle's full
 archive. It validates archive size and ZIP CRCs before accepting the download.
 
-Full checkpoint benchmarking and robustness orchestration will be added when the
-six expensive research runs begin. The reusable metrics and robustness-analysis
-modules required by those commands are already implemented.
+`evaluate_robustness.py` loads one full run's selected `best.pt` checkpoint and
+evaluates it under clean, 20 dB, 10 dB, and 0 dB conditions. Its live manifest
+supplies the authoritative evaluation protocol, while the checkpoint must match
+the manifest's dataset, audio, augmentation, model, and training sections.
+
+Run a bounded validation-only integration check without touching fold 10:
+
+```powershell
+python scripts\evaluate_robustness.py configs\experiment\cnn_baseline.yaml checkpoints\<experiment-id>\best.pt --split validation --max-samples 8
+```
+
+After all implementation and model-selection decisions are frozen, run the full
+test evaluation by omitting smoke limits:
+
+```powershell
+python scripts\evaluate_robustness.py configs\experiment\cnn_baseline.yaml checkpoints\<experiment-id>\best.pt
+```
+
+The CLI rejects `last.pt`, bounded training checkpoints, incompatible manifests,
+overlapping training/evaluation noise files, unsafe condition names, and
+non-empty output directories. It uses only the live
+`evaluation.noise_directory`, currently `MS-SNSD/noise_test`, which safely
+overrides older checkpoint snapshots that predate the corrected noise split.
+Pass `--overwrite` only after inspecting an interrupted or existing evaluation.
+
+Default full-test outputs are isolated under:
+
+```text
+results/robustness/<experiment-id>/test/
+  evaluation_protocol.json
+  evaluation_summary.json
+  condition_metrics.csv
+  robustness_summary.csv
+  robustness_metric_definitions.json
+  conditions/<condition>/summary.json
+  conditions/<condition>/per_class_metrics.csv
+  conditions/<condition>/confusion_matrix.csv
+  conditions/<condition>/predictions.csv
+```
+
+Every predictions table retains the sample ID, target, prediction, fold,
+condition, requested/achieved SNR, selected noise path, deterministic selection
+seed, and whether noise was applied.
+
+`aggregate_results.py` validates and combines the six final fold-10 evaluations:
+
+```powershell
+python scripts\aggregate_results.py
+```
+
+Before calculating comparisons, it requires exactly one baseline and one
+augmented result for CNN, CRNN, and ResNet18. It also verifies that all runs use
+the same test samples, targets, condition order, corruption seed, noise files,
+noise segments, and achieved SNR values. The command refuses to replace an
+existing non-empty output directory unless `--overwrite` is explicitly supplied.
+
+Default outputs are written under `results/analysis/final_robustness/` and
+include master condition metrics, model robustness rankings, augmentation
+effects, per-class comparisons, an analysis summary, protocol provenance, and
+five PNG figures.

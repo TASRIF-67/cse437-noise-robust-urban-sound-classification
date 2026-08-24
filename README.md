@@ -1,100 +1,182 @@
 # Noise-Robust Urban Sound Classification
 
-This repository supports a university data-science research project investigating
-how background noise affects environmental sound classification and whether
-training-time audio augmentation improves model robustness.
+A reproducible PyTorch research pipeline for measuring how controlled
+background noise affects environmental sound classification and whether
+training-time audio augmentation improves robustness.
 
-The initial dataset is UrbanSound8K. Dataset-specific behavior is isolated behind
-an adapter so that future datasets such as ESC-50, FSD50K, GTZAN, and custom
-single-label audio datasets can reuse the same preprocessing, augmentation,
-training, and evaluation pipeline.
+The completed experiment compares baseline and augmented versions of three
+architectures--CNN, CRNN with BiGRU, and ResNet18--on UrbanSound8K under clean,
+20 dB, 10 dB, and 0 dB test conditions.
 
-> **Current status:** Course Phases 2 and 3 are implemented. UrbanSound8K data
-> integration, preprocessing, EDA, controlled SNR corruption, modular augmentation,
-> CNN/CRNN/ResNet18 models, training, checkpointing, and structured evaluation are
-> complete. The full suite has 110 passing tests, and a one-epoch real-audio smoke
-> run verified the complete training pipeline. Full research experiments have not
-> been run yet.
+## Project status
+
+The implementation and primary experiment are complete:
+
+- UrbanSound8K integrity, preprocessing, and exploratory analysis
+- mathematically controlled signal-to-noise-ratio mixing
+- configurable training-only waveform and spectrogram augmentation
+- CNN, CRNN, and ResNet18 model families
+- six full baseline/augmented training runs
+- interruption-safe checkpoints and exact run resumption
+- held-out fold-10 evaluation using separated MS-SNSD test noise
+- 24 model-condition results and 240 per-class results
+- validated cross-model aggregation and research figures
+- 121 passing automated tests
+
+The repository contains source code, configurations, tests, the executed EDA
+notebook, selected paper figures, and a compact snapshot of the final aggregate
+evidence. Raw datasets, checkpoints, logs, and generated runtime artifacts are
+excluded from version control.
 
 ## Research questions
 
-1. Does training-time audio augmentation reduce the loss of classification
-   performance when test audio is corrupted by background noise?
-2. Is the effect of augmentation consistent across CNN, CRNN, and ResNet18
-   architectures?
+1. Does training-time audio augmentation reduce classification-performance
+   degradation under background noise?
+2. Does the augmentation effect differ across CNN, CRNN, and ResNet18?
 
-The final experiment will compare baseline and augmented versions of all three
-architectures under clean, 20 dB, 10 dB, and 0 dB test conditions. A model is
-trained once per training condition and evaluated at every configured noise level;
-models are not retrained for individual SNR values.
+## Main findings
 
-## Repository structure
+### Fold-10 macro F1
+
+| Architecture | Training | Clean | 20 dB | 10 dB | 0 dB |
+|---|---|---:|---:|---:|---:|
+| CNN | Baseline | 0.7323 | 0.6624 | 0.5857 | 0.4230 |
+| CNN | Augmented | 0.7469 | 0.7270 | 0.7071 | 0.5481 |
+| CRNN | Baseline | **0.8037** | 0.7632 | 0.7134 | 0.4952 |
+| CRNN | Augmented | 0.7574 | 0.7634 | **0.7535** | 0.6186 |
+| ResNet18 | Baseline | 0.7617 | 0.7050 | 0.5774 | 0.4249 |
+| ResNet18 | Augmented | 0.7781 | **0.7783** | 0.7432 | **0.6384** |
+
+### Augmentation effect
+
+Values are augmented minus baseline for the same architecture.
+
+| Architecture | Clean F1 change | 0 dB F1 change | Normalized F1 SNR-AUC change |
+|---|---:|---:|---:|
+| CNN | +0.0146 | +0.1252 | +0.1082 |
+| CRNN | -0.0464 | +0.1234 | +0.0509 |
+| ResNet18 | +0.0163 | +0.2135 | +0.1546 |
+
+Augmentation improved noisy-condition robustness for every architecture.
+ResNet18 augmented achieved the strongest overall normalized macro-F1 SNR AUC
+(0.7258), while CRNN baseline achieved the best clean macro F1 (0.8037).
+The CRNN result demonstrates that clean performance and robustness are related
+but distinct objectives.
+
+Detailed condition-level and per-class evidence is stored in
+[paper/evidence/phase_03](paper/evidence/phase_03). The complete methodology and
+experiment record is
+[paper/evidence/PHASE_3_PROJECT_LOG.md](paper/evidence/PHASE_3_PROJECT_LOG.md).
+
+## Experimental design
+
+### Dataset split
+
+UrbanSound8K's official folds are preserved:
+
+| Subset | Folds | Samples |
+|---|---|---:|
+| Training | 1--8 | 7,079 |
+| Validation | 9 | 816 |
+| Test | 10 | 837 |
+
+The test fold is not used for training, checkpoint selection, or development
+smoke tests.
+
+### Audio representation
+
+Every architecture receives the same standardized input:
+
+- mono audio resampled to 22,050 Hz
+- four-second clips using zero padding or cropping
+- deterministic center crops for validation and test
+- Log-Mel spectrograms with 64 Mel bands
+- FFT/window length 1,024 and hop length 512
+- per-example standardization
+- final tensor shape: `[batch, 1, 64, 173]`
+
+### Training conditions
+
+The baseline condition disables robustness-oriented augmentation. The augmented
+condition independently applies:
+
+- time shift, probability 0.5, up to 20% of clip length
+- random gain, probability 0.5, from -6 dB to +6 dB
+- background noise, probability 0.5, at a sampled 0--20 dB SNR
+- frequency masking, probability 0.5, up to 8 Mel bins
+- time masking, probability 0.5, up to 16 frames
+
+Augmentation is bypassed for validation and test data.
+
+### Robustness evaluation
+
+Each selected `best.pt` checkpoint is evaluated once under:
+
+- clean
+- 20 dB SNR
+- 10 dB SNR
+- 0 dB SNR
+
+Training uses `MS-SNSD/noise_train`; final corruption uses the disjoint
+`MS-SNSD/noise_test` split with corruption seed 2025. Sample IDs determine
+noise-file and segment selection so every model receives identical test
+corruptions.
+
+## Repository layout
 
 ```text
-configs/                       Experiment settings grouped by responsibility
-data/                          Local datasets, noise audio, and derived data
-notebooks/                     Exploration and report-oriented analysis only
-src/urban_sound_robustness/    Reusable installable Python package
-  datasets/                    Dataset contracts and dataset-specific adapters
-  audio/                       Loading, length handling, and feature extraction
-  augmentation/                Waveform and spectrogram augmentations
-  models/                      CNN, CRNN, ResNet18, and the model factory
-  training/                    Training, validation, and checkpoint management
-  evaluation/                  Metrics and controlled robustness evaluation
-  visualization/               Reusable research plots
-  utils/                       Configuration, logging, seeds, paths, and devices
-scripts/                       Small command-line entry points
-experiments/                   Per-run configurations, histories, and summaries
-checkpoints/                   Generated model checkpoints
-logs/                          Runtime and TensorBoard logs
-results/                       Metrics, predictions, matrices, and figures
-tests/                         Focused tests of project-owned logic
+configs/                       Composable YAML experiment configuration
+data/                          Local dataset/noise placeholders and layout guide
+notebooks/                     Executed UrbanSound8K exploratory analysis
+paper/                         IEEEtran workspace, selected figures, evidence
+scripts/                       Dataset, inspection, training, evaluation CLIs
+src/urban_sound_robustness/    Reusable Python package
+  audio/                       Loading, resampling, features, SNR mixing
+  augmentation/                Waveform and spectrogram augmentation
+  datasets/                    Dataset contracts and UrbanSound8K adapter
+  evaluation/                  Metrics, checkpoint checks, aggregation
+  models/                      CNN, CRNN, ResNet18, model factory
+  training/                    Epoch engine, orchestration, recovery
+  utils/                       Config, paths, logging, devices, reproducibility
+tests/                         Automated project tests
 ```
 
-Large and generated contents under `data/`, `experiments/`, `checkpoints/`,
-`logs/`, and `results/` are ignored by Git. Their placeholder files keep the
-expected directory layout visible in a fresh clone.
+Generated content under `data/`, `checkpoints/`, `experiments/`, `logs/`,
+and `results/` is intentionally ignored.
 
 ## Installation
 
-Python 3.10 or newer is recommended. Create and activate a virtual environment:
+Python 3.10 or newer is supported. The completed experiments used Python 3.13.1,
+PyTorch 2.11.0+cu126, and an NVIDIA GTX 1660 Ti.
 
-```bash
-python -m venv .venv
-```
-
-On Windows PowerShell:
+Create and activate the required repository-local virtual environment:
 
 ```powershell
-.venv\Scripts\Activate.ps1
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 ```
 
-Install the CUDA profile verified for the GTX 1660 Ti:
+Install one PyTorch profile and then the project:
 
-```bash
+```powershell
+python -m pip install --upgrade pip
 python -m pip install -r requirements-cuda.txt
 python -m pip install -e .
+python -m pip check
 ```
 
-For development on a machine without an NVIDIA GPU, replace the first command
-with:
-
-```bash
-python -m pip install -r requirements-cpu.txt
-```
-
-The profiles pin matching PyTorch, torchvision, and torchaudio builds. The shared
-`requirements.txt` intentionally excludes PyTorch so a broad version constraint
-cannot silently replace a CUDA build with a CPU-only package.
-
-Editable installation allows scripts and notebooks to import
-`urban_sound_robustness` consistently without modifying `PYTHONPATH`.
+For a machine without a compatible NVIDIA GPU, use
+`requirements-cpu.txt` instead of `requirements-cuda.txt`. Do not install both
+profiles.
 
 ## Dataset setup
 
-UrbanSound8K is not committed to this repository. The reproducible acquisition
-flow downloads a public Parquet mirror containing the original WAV bytes and then
-reconstructs the default layout without decoding or resampling:
+Datasets are not redistributed by this repository. Preserve the licenses and
+attribution requirements of UrbanSound8K and the selected external-noise
+collection.
+
+The reproducible UrbanSound8K flow downloads a public Parquet snapshot containing
+the original WAV bytes and reconstructs the standard directory layout:
 
 ```powershell
 python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='danavery/urbansound8K', repo_type='dataset', local_dir='data/raw/UrbanSound8K_parquet')"
@@ -102,170 +184,127 @@ python scripts\prepare_urbansound8k_from_parquet.py
 python scripts\inspect_dataset.py
 ```
 
-The resulting paths are:
+Expected paths:
 
 ```text
-data/raw/UrbanSound8K/audio/fold1/...
-data/raw/UrbanSound8K/audio/fold10/...
+data/raw/UrbanSound8K/audio/fold1 ... fold10
 data/raw/UrbanSound8K/metadata/UrbanSound8K.csv
+data/external_noise/MS-SNSD/noise_train/
+data/external_noise/MS-SNSD/noise_test/
 ```
 
-The initial split reserves folds 1-8 for training, fold 9 for validation, and
-fold 10 for testing. These assignments are configurable and preserve the official
-fold boundaries to reduce source-recording leakage.
-
-The latest full local inspection verified all 8,732 metadata rows and WAV headers:
-zero files were missing or unreadable, the audio totals 8.75 hours, and source
-sample rates range from 8 kHz to 192 kHz. Class counts range from 374 (`gun_shot`)
-to 1,000, so later evaluation will report macro-averaged metrics alongside
-accuracy. Generated inspection artifacts are stored under
-`results/metrics/dataset_inspection/`.
-
-External noise belongs under `data/external_noise/`. It is used only as an
-augmentation or corruption source and never as a target class.
-
-## Exploratory data analysis
-
-The executed notebook `notebooks/01_urbansound8k_eda.ipynb` analyzes all 8,732
-inventory records and decodes ten deterministic representative class examples.
-It reports class/fold balance, durations, recording characteristics, waveforms,
-Log-Mel features, and MFCCs. Open it after activating `.venv`:
-
-```powershell
-python -m jupyter lab notebooks\01_urbansound8k_eda.ipynb
-```
-
-Publication-ready PNG files are saved under `results/figures/eda/`; underlying
-CSV and JSON summaries are saved under `results/metrics/eda/`.
-
-## Controlled noise and SNR
-
-`audio/noise.py` scales background noise from mean-square signal/noise power,
-without clipping or independently normalizing a mixture. `evaluation/corruption.py`
-uses the independent corruption seed and sample ID to select the same noise file
-and segment for every model and SNR condition. Short noise repeats cyclically;
-long noise receives a deterministic crop. Silent clean signals are preserved
-rather than assigned a mathematically false finite SNR.
-
-Inspect clean, 20 dB, 10 dB, and 0 dB conditions on one real test clip:
-
-```powershell
-python scripts\inspect_snr.py
-```
-
-This default verification uses seeded white noise. Final experiments must use a
-licensed real noise-only collection under `data/external_noise/`. The production
-corruptor rejects an empty noise directory instead of silently substituting
-synthetic noise.
-
-## Methodology
-
-Every model receives standardized Log-Mel tensors shaped
-[batch, 1, 64, 173] and returns class logits shaped [batch, 10]:
-
-- The custom CNN uses three readable convolution blocks and adaptive pooling.
-- The CRNN converts CNN feature maps into a time sequence, passes it through a
-  bidirectional GRU, and averages temporal outputs before classification.
-- ResNet18 uses torchvision's maintained implementation. Its first convolution
-  accepts one spectrogram channel; pretrained RGB filters are averaged across
-  channels to initialize that layer.
-
-Training-only augmentation supports independent time shift, gain, background
-noise, frequency masking, and time masking switches. Validation and test calls
-bypass every augmentation. Background-noise augmentation requires real audio
-under data/external_noise and fails clearly when none is available.
-
-The trainer supports CrossEntropyLoss, Adam/AdamW, optional scheduling, mixed
-precision on CUDA, gradient accumulation, early stopping, best/last checkpoints,
-CSV history, TensorBoard, logging, configuration snapshots, and environment
-snapshots. Evaluation saves overall, macro, and per-class metrics, confusion
-matrices, and predictions. Robustness analysis calculates clean-performance
-drops, retention, SNR slopes, and normalized SNR AUC.
-
-The six ready manifests cover baseline and augmented CNN, CRNN, and ResNet18
-experiments under configs/experiment.
-
-## Configuration
-
-Configuration files are grouped by concern:
-
-- `dataset`: metadata schema, paths, class information, and official folds.
-- `audio`: sample rate, clip duration, Log-Mel parameters, and MFCC count.
-- `augmentation`: baseline and robustness-oriented transformation choices.
-- `model`: architecture-specific settings.
-- `training`: optimizer, batch size, reproducibility, and checkpoint behavior.
-- `evaluation`: deterministic SNR conditions and metric settings.
-- `paths`: repository-relative storage locations.
-- `experiment`: composed baseline, augmented, and development runs.
-
-Experiment manifests select one file from each component group and may apply small
-nested overrides. Validate the development manifest with:
-
-```bash
-python scripts/check_config.py
-```
-
-The checker composes all referenced YAML files, validates cross-section assumptions,
-resolves repository-relative paths, and reports the selected CPU or CUDA device.
-The development manifest uses two epochs, a batch size of four, and no DataLoader
-workers so future smoke tests remain inexpensive.
-
-## Training workflow
-
-```text
-Configuration -> dataset adapter -> audio preprocessing -> baseline/augmented training
-              -> saved checkpoint -> clean/noisy evaluation -> research analysis
-```
-
-Run the verified lightweight end-to-end check:
-
-~~~powershell
-python scripts\train.py configs\experiment\development.yaml --epochs 1 --max-train-samples 8 --max-validation-samples 4 --num-workers 0 --run-label smoke
-~~~
-
-Run a full baseline after inspection:
-
-~~~powershell
-python scripts\train.py configs\experiment\cnn_baseline.yaml --run-label run01
-~~~
-
-Each invocation creates a timestamped, non-overwriting run with configuration
-and environment snapshots, logs, checkpoints, history, and validation metrics.
-Limited runs are marked as smoke runs and are not research results.
-
-## Reproducibility and leakage safeguards
-
-The utility layer seeds Python, NumPy, PyTorch, CUDA, and DataLoader workers.
-It can request deterministic PyTorch behavior, create timestamped experiment IDs,
-prevent output-directory reuse, and save resolved configuration and environment
-snapshots. Training augmentation is never applied to validation or test
-samples. Controlled noisy test variants use a separate fixed corruption seed and
-stable sample identifiers so every model receives the same noise file and segment.
+The noise directories must contain properly licensed noise-only audio. External
+noise is used only as augmentation or corruption input and never as a target
+class.
 
 ## Verification
 
-Run the focused utility suite inside the active virtual environment:
+With `.venv` active:
 
-```bash
-python -m pytest
+```powershell
+python -m pytest -v
+python -m compileall -q src scripts tests
 ```
 
-The current tests cover the foundation utilities, UrbanSound8K validation,
-inspection reports, lossless reconstruction, waveform loading, mono conversion,
-resampling, duration normalization, log-Mel extraction, numerical stability,
-MFCC extraction, DataLoader batching, target-SNR accuracy, edge cases, and
-deterministic noise corruption, augmentation leakage safeguards, model shapes,
-backpropagation, checkpointing, classification metrics, and robustness summaries.
-Use `python -m pytest -v` to see every test name. The current expected result is
-110 passed.
+Expected test result:
 
-## Extending the project
+```text
+121 passed
+```
 
-Adding a dataset should require a new adapter under `datasets/` and a dataset YAML
-file. Adding a model should require a model module plus a small factory registration.
-Neither extension should require changes to generic training, evaluation,
-augmentation, metrics, or visualization code.
+The suite covers configuration, dataset validation, audio loading and
+preprocessing, augmentation isolation, deterministic SNR corruption, model
+interfaces, training and exact resume behavior, classification metrics,
+checkpoint validation, provenance preservation, and result aggregation.
 
-Remaining research work is the licensed external-noise collection, full six-run
-training, clean/noisy checkpoint evaluation, comparisons, ablations, and final
-report analysis.
+## Running the pipeline
+
+Validate a manifest:
+
+```powershell
+python scripts\check_config.py configs\experiment\cnn_baseline.yaml
+```
+
+Run a bounded integration check:
+
+```powershell
+python scripts\train.py configs\experiment\development.yaml --epochs 1 --max-train-samples 8 --max-validation-samples 4 --num-workers 0 --run-label smoke
+```
+
+Run a full configured experiment:
+
+```powershell
+python scripts\train.py configs\experiment\cnn_baseline.yaml --run-label run01
+```
+
+Resume an interrupted experiment:
+
+```powershell
+python scripts\train.py configs\experiment\cnn_baseline.yaml --resume checkpoints\<experiment-id>\last.pt
+```
+
+Evaluate the selected full-run checkpoint on held-out fold 10:
+
+```powershell
+python scripts\evaluate_robustness.py configs\experiment\cnn_baseline.yaml checkpoints\<experiment-id>\best.pt
+```
+
+Aggregate the six final evaluations:
+
+```powershell
+python scripts\aggregate_results.py
+```
+
+Detailed CLI behavior and output layouts are documented in
+[scripts/README.md](scripts/README.md). Experiment configuration is documented
+in [configs/README.md](configs/README.md).
+
+## Reproducibility safeguards
+
+- repository-relative paths through `pathlib.Path`
+- configuration and environment snapshots per run
+- deterministic Python, NumPy, PyTorch, CUDA, and DataLoader seeds
+- official fold preservation
+- training-only augmentation
+- disjoint training and evaluation noise banks
+- independent fixed corruption seed
+- stable sample-based corruption assignment
+- atomic `best.pt` and `last.pt` checkpoints
+- exact optimizer, scheduler, early-stopping, history, and RNG restoration
+- strict rejection of smoke or incompatible final checkpoints
+- non-overwriting experiment and result directories
+
+## Paper and evidence
+
+[paper/README.md](paper/README.md) describes the generic IEEE conference-style
+`IEEEtran` workspace. It includes:
+
+- selected EDA and robustness figures
+- verified LaTeX result tables
+- modular section files
+- a compact final evidence snapshot
+- missing-figure placeholder handling for report work still in progress
+
+The generated Overleaf ZIP is a local packaging artifact and is not committed;
+it can be recreated from the contents of `paper/`.
+
+## Limitations
+
+- Final testing uses one official UrbanSound8K fold, not full ten-fold
+  cross-validation.
+- Each training configuration has one completed training seed.
+- Confidence intervals and formal paired significance tests are not included.
+- Evaluation uses one held-out noise collection and three finite noisy SNR
+  points.
+- ResNet18 is trained from scratch; pretrained audio transformers are outside
+  the experiment scope.
+
+The findings therefore describe this controlled experimental setup and should
+not be generalized to every acoustic environment.
+
+## Additional documentation
+
+- [data/README.md](data/README.md): local dataset and noise layout
+- [notebooks/README.md](notebooks/README.md): EDA notebook usage
+- [scripts/README.md](scripts/README.md): command-line reference
+- [tests/README.md](tests/README.md): automated-test scope

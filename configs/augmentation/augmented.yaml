@@ -14,7 +14,8 @@ waveform:
   background_noise:
     enabled: true
     probability: 0.5
-    noise_directory: data/external_noise
+    # Keep training augmentation isolated from evaluation-only noise recordings.
+    noise_directory: data/external_noise/MS-SNSD/noise_train
     min_snr_db: 0.0
     max_snr_db: 20.0
   pitch_shift:
@@ -37,4 +38,3 @@ spectrogram:
     enabled: true
     probability: 0.5
     max_mask_frames: 16
-

@@ -37,6 +37,29 @@ def _model() -> nn.Module:
     return nn.Sequential(nn.Flatten(), nn.Linear(8, 2))
 
 
+def _dropout_model() -> nn.Module:
+    """Include stochastic model behavior so RNG restoration is exercised."""
+    return nn.Sequential(nn.Flatten(), nn.Dropout(0.25), nn.Linear(8, 2))
+
+
+def _loaders(seed: int) -> tuple[DataLoader, DataLoader]:
+    train_generator = torch.Generator().manual_seed(seed)
+    validation_generator = torch.Generator().manual_seed(seed + 1)
+    train_loader = DataLoader(
+        _samples(),
+        batch_size=4,
+        shuffle=True,
+        generator=train_generator,
+    )
+    validation_loader = DataLoader(
+        _samples(),
+        batch_size=4,
+        shuffle=False,
+        generator=validation_generator,
+    )
+    return train_loader, validation_loader
+
+
 def _training_settings() -> dict:
     return {
         "epochs": 2,
@@ -174,3 +197,89 @@ def test_checkpoint_can_restore_model_and_optimizer(tmp_path: Path) -> None:
     assert checkpoint["epoch"] == 3
     for restored, target in zip(model.parameters(), expected):
         torch.testing.assert_close(restored, target)
+
+
+def test_resumed_training_matches_uninterrupted_training(tmp_path: Path) -> None:
+    """An epoch-boundary restart must reproduce uninterrupted model state."""
+    torch.manual_seed(123)
+    uninterrupted_model = _dropout_model()
+    uninterrupted_train, uninterrupted_validation = _loaders(900)
+    uninterrupted_trainer = Trainer(
+        uninterrupted_model,
+        ["zero", "one"],
+        _training_settings(),
+        device=torch.device("cpu"),
+        checkpoint_directory=tmp_path / "uninterrupted" / "checkpoints",
+        history_path=tmp_path / "uninterrupted" / "history.csv",
+    )
+    uninterrupted_outcome = uninterrupted_trainer.fit(
+        uninterrupted_train,
+        uninterrupted_validation,
+        epochs=4,
+    )
+    expected_parameters = [
+        parameter.detach().clone() for parameter in uninterrupted_model.parameters()
+    ]
+
+    torch.manual_seed(123)
+    interrupted_model = _dropout_model()
+    interrupted_train, interrupted_validation = _loaders(900)
+    interrupted_directory = tmp_path / "interrupted"
+    interrupted_trainer = Trainer(
+        interrupted_model,
+        ["zero", "one"],
+        _training_settings(),
+        device=torch.device("cpu"),
+        checkpoint_directory=interrupted_directory / "checkpoints",
+        history_path=interrupted_directory / "history.csv",
+    )
+    partial_outcome = interrupted_trainer.fit(
+        interrupted_train,
+        interrupted_validation,
+        epochs=2,
+    )
+    checkpoint = torch.load(
+        partial_outcome.last_checkpoint,
+        map_location="cpu",
+        weights_only=False,
+    )
+    assert checkpoint["epoch"] == 2
+    assert checkpoint["scheduler_state_dict"] is not None
+    assert len(checkpoint["history"]) == 2
+    assert checkpoint["random_states"]["torch"] is not None
+    assert checkpoint["data_loader_generator_states"]["train"] is not None
+
+    # Simulate unrelated process activity between a power outage and restart.
+    torch.manual_seed(999)
+    resumed_model = _dropout_model()
+    resumed_train, resumed_validation = _loaders(900)
+    resumed_trainer = Trainer(
+        resumed_model,
+        ["zero", "one"],
+        _training_settings(),
+        device=torch.device("cpu"),
+        checkpoint_directory=interrupted_directory / "checkpoints",
+        history_path=interrupted_directory / "history.csv",
+    )
+    resumed_outcome = resumed_trainer.fit(
+        resumed_train,
+        resumed_validation,
+        epochs=4,
+        resume_from=partial_outcome.last_checkpoint,
+    )
+
+    for resumed_parameter, expected_parameter in zip(
+        resumed_model.parameters(),
+        expected_parameters,
+    ):
+        torch.testing.assert_close(
+            resumed_parameter,
+            expected_parameter,
+            rtol=0,
+            atol=0,
+        )
+    pd.testing.assert_frame_equal(
+        resumed_outcome.history.reset_index(drop=True),
+        uninterrupted_outcome.history.reset_index(drop=True),
+    )
+    assert resumed_outcome.epochs_completed == 4

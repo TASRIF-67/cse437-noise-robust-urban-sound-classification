@@ -15,6 +15,7 @@ from urban_sound_robustness.utils.device import select_device
 from urban_sound_robustness.utils.experiment import (
     build_experiment_id,
     create_experiment_layout,
+    load_experiment_layout,
 )
 from urban_sound_robustness.utils.logging_utils import configure_logging
 from urban_sound_robustness.utils.reproducibility import (
@@ -140,6 +141,13 @@ def test_experiment_layout_saves_snapshots_without_overwriting(tmp_path: Path) -
             tmp_path,
             configuration,
         )
+
+    reopened = load_experiment_layout(
+        "cnn_baseline_test",
+        path_settings,
+        tmp_path,
+    )
+    assert reopened == paths
 
 
 def sys_executable() -> str:

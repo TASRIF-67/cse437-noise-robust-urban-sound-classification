@@ -29,6 +29,7 @@ from urban_sound_robustness.utils import (
     create_experiment_layout,
     describe_device,
     load_experiment_config,
+    load_experiment_layout,
     seed_data_loader_worker,
     seed_everything,
     select_device,
@@ -57,7 +58,18 @@ def parse_arguments() -> argparse.Namespace:
         default=None,
         help="Exact output ID. Existing experiment paths are never overwritten.",
     )
-    parser.add_argument("--epochs", type=int, default=None)
+    parser.add_argument(
+        "--resume",
+        type=Path,
+        default=None,
+        help="Continue the same run from its atomic last.pt checkpoint.",
+    )
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=None,
+        help="Total target epoch count, including already completed epochs.",
+    )
     parser.add_argument("--device", default=None, help="auto, cpu, cuda, or cuda:N")
     parser.add_argument("--num-workers", type=int, default=None)
     parser.add_argument("--max-train-samples", type=int, default=None)
@@ -142,11 +154,84 @@ def _create_data_loaders(
     return train_loader, validation_loader, validation_ids
 
 
+def _prepare_resume(arguments: argparse.Namespace, project_config):
+    """Validate a resume request and restore its original runtime limits."""
+    if arguments.resume is None:
+        return None, None
+    if arguments.experiment_id is not None or arguments.run_label is not None:
+        raise ValueError(
+            "--resume cannot be combined with --experiment-id or --run-label; "
+            "the original experiment identity is preserved."
+        )
+    checkpoint_path = arguments.resume.expanduser().resolve()
+    if not checkpoint_path.is_file():
+        raise FileNotFoundError(f"Resume checkpoint not found: {checkpoint_path}")
+    checkpoint = torch.load(
+        checkpoint_path,
+        map_location="cpu",
+        weights_only=False,
+    )
+    if int(checkpoint.get("checkpoint_version", 0)) != 2:
+        raise ValueError(
+            "This checkpoint predates complete resume support. Start a new run."
+        )
+    saved_configuration = checkpoint.get("configuration")
+    if not isinstance(saved_configuration, dict):
+        raise ValueError("Resume checkpoint has no saved experiment configuration.")
+    for section_name in ("dataset", "audio", "augmentation", "model", "training"):
+        if saved_configuration.get(section_name) != project_config.data.get(
+            section_name
+        ):
+            raise ValueError(
+                f"The supplied manifest differs from the checkpoint in "
+                f"'{section_name}'."
+            )
+
+    saved_runtime = dict(saved_configuration.get("runtime_overrides", {}))
+    saved_options = {
+        "num_workers": saved_runtime.get(
+            "effective_num_workers",
+            saved_configuration["training"]["num_workers"],
+        ),
+        "max_train_samples": saved_runtime.get("max_train_samples"),
+        "max_validation_samples": saved_runtime.get("max_validation_samples"),
+        "max_train_batches": saved_runtime.get("max_train_batches"),
+        "max_validation_batches": saved_runtime.get("max_validation_batches"),
+    }
+    for option_name, saved_value in saved_options.items():
+        requested_value = getattr(arguments, option_name)
+        if requested_value is None:
+            setattr(arguments, option_name, saved_value)
+        elif requested_value != saved_value:
+            raise ValueError(
+                f"--{option_name.replace('_', '-')} cannot change while resuming "
+                f"(checkpoint={saved_value}, requested={requested_value})."
+            )
+
+    saved_epochs = saved_runtime.get("effective_epochs")
+    if saved_epochs is None:
+        saved_epochs = saved_runtime.get("epochs")
+    if saved_epochs is None:
+        saved_epochs = saved_configuration["training"]["epochs"]
+    if arguments.epochs is None:
+        arguments.epochs = int(saved_epochs)
+    if arguments.epochs < int(checkpoint["epoch"]):
+        raise ValueError(
+            f"Requested total epochs {arguments.epochs} is below checkpoint "
+            f"epoch {checkpoint['epoch']}."
+        )
+    return checkpoint_path, saved_configuration
+
+
 def main() -> None:
     """Run training, restore the best checkpoint, and save validation outputs."""
     arguments = parse_arguments()
     started_at = time.perf_counter()
     project_config = load_experiment_config(arguments.config)
+    resume_checkpoint, saved_configuration = _prepare_resume(
+        arguments,
+        project_config,
+    )
     training_settings = project_config.section("training")
     seed_everything(
         int(training_settings["seed"]),
@@ -164,34 +249,66 @@ def main() -> None:
     )
     model_settings = project_config.section("model")
     augmentation_settings = project_config.section("augmentation")
-    run_configuration = deepcopy(project_config.data)
+    effective_epochs = (
+        int(training_settings["epochs"])
+        if arguments.epochs is None
+        else arguments.epochs
+    )
+    effective_num_workers = (
+        int(training_settings["num_workers"])
+        if arguments.num_workers is None
+        else arguments.num_workers
+    )
     runtime_overrides = {
         "source_manifest": str(project_config.source_path),
         "epochs": arguments.epochs,
+        "effective_epochs": effective_epochs,
         "device": arguments.device,
         "num_workers": arguments.num_workers,
+        "effective_num_workers": effective_num_workers,
         "max_train_samples": arguments.max_train_samples,
         "max_validation_samples": arguments.max_validation_samples,
         "max_train_batches": arguments.max_train_batches,
         "max_validation_batches": arguments.max_validation_batches,
         "run_label": arguments.run_label,
+        "resume_from": (
+            None if resume_checkpoint is None else str(resume_checkpoint)
+        ),
     }
-    run_configuration["runtime_overrides"] = runtime_overrides
-    experiment_id = arguments.experiment_id or build_experiment_id(
-        str(model_settings["name"]),
-        str(augmentation_settings["name"]),
-        arguments.run_label,
-    )
-    paths = create_experiment_layout(
-        experiment_id,
-        project_config.section("paths"),
-        project_config.project_root,
-        run_configuration,
-    )
+    if resume_checkpoint is None:
+        run_configuration = deepcopy(project_config.data)
+        run_configuration["runtime_overrides"] = runtime_overrides
+        experiment_id = arguments.experiment_id or build_experiment_id(
+            str(model_settings["name"]),
+            str(augmentation_settings["name"]),
+            arguments.run_label,
+        )
+        paths = create_experiment_layout(
+            experiment_id,
+            project_config.section("paths"),
+            project_config.project_root,
+            run_configuration,
+        )
+    else:
+        run_configuration = deepcopy(saved_configuration)
+        experiment_id = resume_checkpoint.parent.name
+        paths = load_experiment_layout(
+            experiment_id,
+            project_config.section("paths"),
+            project_config.project_root,
+        )
+        expected_checkpoint = paths.checkpoint_directory / "last.pt"
+        if resume_checkpoint != expected_checkpoint:
+            raise ValueError(
+                "Resume must use the original run's checkpoints/<experiment-id>/"
+                "last.pt file."
+            )
     logger = configure_logging(paths.log_directory / "training.log")
     model = create_model(model_settings)
     parameter_count = count_trainable_parameters(model)
     logger.info("Experiment: %s", experiment_id)
+    if resume_checkpoint is not None:
+        logger.info("Resume checkpoint: %s", resume_checkpoint)
     logger.info("Device: %s", describe_device(device))
     logger.info(
         "Data: %d training samples, %d validation samples",
@@ -213,9 +330,10 @@ def main() -> None:
     outcome = trainer.fit(
         train_loader,
         validation_loader,
-        epochs=arguments.epochs,
+        epochs=effective_epochs,
         max_train_batches=arguments.max_train_batches,
         max_validation_batches=arguments.max_validation_batches,
+        resume_from=resume_checkpoint,
     )
     if outcome.best_checkpoint is not None:
         load_checkpoint(outcome.best_checkpoint, model, map_location=device)

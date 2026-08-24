@@ -1,0 +1,28 @@
+\section{Dataset and Exploratory Analysis}
+
+UrbanSound8K contains 8,732 clips from ten urban sound classes. The official
+fold organization was preserved: folds 1--8 were used for training, fold 9 for
+validation, and fold 10 for final testing. This prevents a naive random split
+from placing closely related source recordings in different subsets.
+
+\input{tables/tab_p03_01_dataset_split}
+
+\ProjectFigure
+  {figures/phase_02/fig_p02_01_class_distribution.png}
+  {\columnwidth}
+  {UrbanSound8K class-distribution plot}
+  {Class distribution of the complete UrbanSound8K inventory. The imbalance
+  motivates reporting macro-averaged metrics alongside accuracy.}
+  {fig:class-distribution}
+
+\ProjectFigure
+  {figures/phase_02/fig_p02_06_representative_log_mel.png}
+  {\columnwidth}
+  {Representative Log-Mel examples}
+  {Representative standardized Log-Mel spectrograms selected
+  deterministically from the ten target classes.}
+  {fig:representative-log-mel}
+
+\DraftingNote{Add a concise interpretation of duration, sample-rate, and channel
+findings from the Phase 2 evidence. Avoid duplicating every EDA plot in the main
+paper; move secondary plots to an appendix if required.}

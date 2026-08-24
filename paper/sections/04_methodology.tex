@@ -1,0 +1,66 @@
+\section{Methodology}
+
+\ProjectFigure
+  {figures/phase_03/fig_p03_01_experiment_pipeline.pdf}
+  {0.96\columnwidth}
+  {Pipeline diagram showing preprocessing, optional training augmentation,
+  three model families, and clean/20/10/0 dB evaluation -- pending}
+  {Overview of the shared training and controlled robustness-evaluation
+  pipeline. Augmentation is applied only to training data.}
+  {fig:experiment-pipeline}
+
+\subsection{Audio Preprocessing}
+
+All recordings were converted to mono, resampled to 22,050 Hz, and normalized
+to four seconds. Short recordings were zero-padded. Training used seeded random
+crops, whereas validation and test processing used deterministic center crops.
+The common model input was a per-example standardized Log-Mel spectrogram with
+shape $1 \times 64 \times 173$.
+
+\input{tables/tab_p03_02_preprocessing_training_configuration}
+
+\subsection{Training-Time Augmentation}
+
+The baseline condition disabled robustness-oriented augmentation. The augmented
+condition independently applied time shift, random gain, background-noise
+mixing, frequency masking, and time masking with probability 0.5. Background
+noise used a training-only MS-SNSD noise bank and a uniformly selected SNR in
+the configured 0--20 dB range.
+
+\subsection{Model Architectures}
+
+\input{tables/tab_p03_03_model_parameter_counts}
+
+Every architecture accepted the same one-channel Log-Mel representation and
+returned ten class logits. The ResNet18 model was trained from scratch rather
+than initialized with ImageNet weights.
+
+\subsection{Controlled Noise Corruption}
+
+Final evaluation used clean audio and noisy variants at 20, 10, and 0 dB. Noise
+was scaled using mean-square signal and noise power:
+
+\begin{equation}
+  \mathrm{SNR}_{\mathrm{dB}}
+  = 10 \log_{10}\left(\frac{P_{\mathrm{signal}}}{P_{\mathrm{noise}}}\right).
+\end{equation}
+
+The corruption seed and sample identifier deterministically selected the noise
+file and segment. Therefore, every model received the same corruption for a
+given test sample and condition. Training noise and evaluation noise came from
+separate MS-SNSD directories.
+
+\ProjectFigure
+  {figures/phase_02/fig_p02_08_snr_waveform_comparison.png}
+  {\columnwidth}
+  {Controlled SNR waveform comparison}
+  {Example waveform corruption under the configured clean, 20 dB, 10 dB, and
+  0 dB conditions.}
+  {fig:snr-waveform-comparison}
+
+\subsection{Metrics}
+
+The study reports accuracy, macro precision, macro recall, macro F1, per-class
+precision/recall/F1, and confusion matrices. Robustness summaries include the
+clean-to-noisy drop, relative retention, ordinary least-squares slope over the
+finite SNR points, and normalized trapezoidal area under the 0--20 dB SNR curve.

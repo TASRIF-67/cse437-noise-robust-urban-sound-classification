@@ -10,6 +10,7 @@ from urban_sound_robustness.utils.experiment import (
     ExperimentPaths,
     build_experiment_id,
     create_experiment_layout,
+    load_experiment_layout,
 )
 from urban_sound_robustness.utils.logging_utils import configure_logging
 from urban_sound_robustness.utils.paths import (
@@ -34,6 +35,7 @@ __all__ = [
     "describe_device",
     "find_project_root",
     "load_experiment_config",
+    "load_experiment_layout",
     "resolve_path_settings",
     "resolve_project_path",
     "seed_data_loader_worker",

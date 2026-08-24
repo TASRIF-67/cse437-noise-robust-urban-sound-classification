@@ -15,6 +15,14 @@ env/
 build/
 dist/
 *.egg-info/
+cse437_ieee_overleaf_project.zip
+
+# Local progress logs and paper-workflow notes
+/PROJECT_STATUS.md
+/PHASE_3_PROJECT_LOG.md
+/paper/*_INSTRUCTIONS.md
+/paper/*/README.md
+/paper/figures/phase_04/
 
 # IDE and operating-system files
 .vscode/
@@ -58,6 +66,9 @@ results/predictions/*
 results/preprocessing_inspection/
 results/preprocessing_training_smoke/
 results/snr_inspection/
+results/robustness/
+results/robustness_smoke/
+results/analysis/
 
 # TensorBoard event files and model artifacts outside standard directories
 events.out.tfevents.*

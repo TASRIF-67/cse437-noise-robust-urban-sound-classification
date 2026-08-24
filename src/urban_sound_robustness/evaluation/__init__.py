@@ -1,5 +1,20 @@
 """Classification metrics and controlled robustness evaluation."""
 
+from urban_sound_robustness.evaluation.aggregation import (
+    AggregatedResults,
+    ResultAggregationError,
+    aggregate_evaluation_results,
+    save_aggregated_results,
+)
+from urban_sound_robustness.evaluation.checkpoint import (
+    CheckpointEvaluationError,
+    ConditionPredictionCollection,
+    ResearchCheckpoint,
+    RobustnessEvaluationDataset,
+    collect_condition_predictions,
+    load_research_checkpoint,
+    validate_noise_isolation,
+)
 from urban_sound_robustness.evaluation.corruption import (
     ControlledCorruption,
     DeterministicNoiseCorruptor,
@@ -22,18 +37,29 @@ from urban_sound_robustness.evaluation.robustness import (
 )
 
 __all__ = [
+    "AggregatedResults",
+    "CheckpointEvaluationError",
     "ControlledCorruption",
     "ClassificationResult",
+    "ConditionPredictionCollection",
     "DeterministicNoiseCorruptor",
     "NoiseDatasetError",
     "RobustnessCondition",
     "RobustnessAnalysis",
+    "RobustnessEvaluationDataset",
+    "ResearchCheckpoint",
+    "ResultAggregationError",
+    "aggregate_evaluation_results",
     "calculate_classification_metrics",
     "calculate_robustness_metrics",
     "collect_model_predictions",
+    "collect_condition_predictions",
     "discover_noise_files",
     "parse_robustness_conditions",
+    "load_research_checkpoint",
     "save_classification_result",
+    "save_aggregated_results",
     "save_robustness_analysis",
     "stable_seed",
+    "validate_noise_isolation",
 ]

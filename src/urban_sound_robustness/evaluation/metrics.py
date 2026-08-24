@@ -121,6 +121,7 @@ def save_classification_result(
     *,
     class_names: Sequence[str],
     sample_ids: Sequence[str] | None = None,
+    prediction_metadata: Mapping[str, Sequence[object]] | None = None,
 ) -> dict[str, Path]:
     """Save summary, per-class metrics, confusion matrix, and predictions."""
     output = Path(output_directory).expanduser().resolve()
@@ -156,5 +157,18 @@ def save_classification_result(
             "prediction": result.predictions,
         }
     )
+    if prediction_metadata is not None:
+        reserved_columns = set(prediction_table.columns)
+        for column_name, values in prediction_metadata.items():
+            if column_name in reserved_columns:
+                raise ValueError(
+                    f"Prediction metadata cannot replace '{column_name}'."
+                )
+            if len(values) != len(result.targets):
+                raise ValueError(
+                    f"Prediction metadata '{column_name}' length must match "
+                    "evaluated targets."
+                )
+            prediction_table[column_name] = list(values)
     prediction_table.to_csv(paths["predictions"], index=False)
     return paths

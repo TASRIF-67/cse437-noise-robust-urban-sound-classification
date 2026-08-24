@@ -178,6 +178,67 @@ def create_experiment_layout(
     )
 
 
+def load_experiment_layout(
+    experiment_id: str,
+    path_settings: Mapping[str, str | Path],
+    project_root: str | Path,
+) -> ExperimentPaths:
+    """Open an existing run layout without creating or replacing any paths."""
+    if not experiment_id or experiment_id != _to_safe_identifier(experiment_id):
+        raise ValueError(
+            "Experiment IDs may contain lowercase letters, numbers, underscores, "
+            "and hyphens only."
+        )
+    resolved_roots = resolve_path_settings(path_settings, project_root)
+    required_roots = {"experiments", "checkpoints", "logs", "results"}
+    missing_roots = required_roots - set(resolved_roots)
+    if missing_roots:
+        missing_names = ", ".join(sorted(missing_roots))
+        raise ValueError(f"Path settings are missing required roots: {missing_names}")
+
+    experiment_directory = resolved_roots["experiments"] / experiment_id
+    checkpoint_directory = resolved_roots["checkpoints"] / experiment_id
+    log_directory = resolved_roots["logs"] / experiment_id
+    results_root = resolved_roots["results"]
+    paths = ExperimentPaths(
+        experiment_directory=experiment_directory,
+        checkpoint_directory=checkpoint_directory,
+        log_directory=log_directory,
+        metrics_directory=results_root / "metrics" / experiment_id,
+        figures_directory=results_root / "figures" / experiment_id,
+        confusion_matrices_directory=(
+            results_root / "confusion_matrices" / experiment_id
+        ),
+        predictions_directory=results_root / "predictions" / experiment_id,
+        config_snapshot=experiment_directory / "config.yaml",
+        environment_snapshot=experiment_directory / "environment.json",
+    )
+    required_directories = (
+        paths.experiment_directory,
+        paths.checkpoint_directory,
+        paths.log_directory,
+        paths.metrics_directory,
+        paths.figures_directory,
+        paths.confusion_matrices_directory,
+        paths.predictions_directory,
+    )
+    missing_directories = [
+        directory for directory in required_directories if not directory.is_dir()
+    ]
+    missing_files = [
+        path
+        for path in (paths.config_snapshot, paths.environment_snapshot)
+        if not path.is_file()
+    ]
+    if missing_directories or missing_files:
+        missing = missing_directories + missing_files
+        formatted = ", ".join(str(path) for path in missing)
+        raise FileNotFoundError(
+            f"Experiment '{experiment_id}' is incomplete; missing: {formatted}"
+        )
+    return paths
+
+
 def collect_environment_information() -> dict[str, Any]:
     """
     Collect serializable runtime details needed to reproduce an experiment.
