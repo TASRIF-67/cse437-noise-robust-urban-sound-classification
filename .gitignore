@@ -17,12 +17,10 @@ dist/
 *.egg-info/
 cse437_ieee_overleaf_project.zip
 
-# Local progress logs and paper-workflow notes
+# Local progress logs and paper-workflow files
 /PROJECT_STATUS.md
 /PHASE_3_PROJECT_LOG.md
-/paper/*_INSTRUCTIONS.md
-/paper/*/README.md
-/paper/figures/phase_04/
+/paper/
 
 # IDE and operating-system files
 .vscode/

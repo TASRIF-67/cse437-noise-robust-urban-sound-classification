@@ -63,10 +63,8 @@ ResNet18 augmented achieved the strongest overall normalized macro-F1 SNR AUC
 The CRNN result demonstrates that clean performance and robustness are related
 but distinct objectives.
 
-Detailed condition-level and per-class evidence is stored in
-[paper/evidence/phase_03](paper/evidence/phase_03). The complete methodology and
-experiment record is
-[paper/evidence/PHASE_3_PROJECT_LOG.md](paper/evidence/PHASE_3_PROJECT_LOG.md).
+Condition-level, per-class, and aggregate evidence is generated locally under
+`results/` by the evaluation and aggregation commands documented below.
 
 ## Experimental design
 
@@ -128,7 +126,6 @@ corruptions.
 configs/                       Composable YAML experiment configuration
 data/                          Local dataset/noise placeholders and layout guide
 notebooks/                     Executed UrbanSound8K exploratory analysis
-paper/                         IEEEtran workspace, selected figures, evidence
 scripts/                       Dataset, inspection, training, evaluation CLIs
 src/urban_sound_robustness/    Reusable Python package
   audio/                       Loading, resampling, features, SNR mixing
@@ -274,24 +271,12 @@ in [configs/README.md](configs/README.md).
 - strict rejection of smoke or incompatible final checkpoints
 - non-overwriting experiment and result directories
 
-## Paper and evidence
-
-[paper/README.md](paper/README.md) describes the generic IEEE conference-style
-`IEEEtran` workspace. It includes:
-
-- selected EDA and robustness figures
-- verified LaTeX result tables
-- modular section files
-- a compact final evidence snapshot
-- missing-figure placeholder handling for report work still in progress
+## Final report
 
 The completed report is available from both locations:
 
-- [Final submission PDF](paper/final/CSE437_Group5_Final_Submission.pdf)
+- [Final submission PDF](CSE437_Group5_Final_Submission.pdf)
 - [Project report folder on Google Drive](https://drive.google.com/drive/u/0/folders/1Rn1jU3xm5COCyapM0ZAD2xBiw-Mx_ndc)
-
-The generated Overleaf ZIP is a local packaging artifact and is not committed;
-it can be recreated from the contents of `paper/`.
 
 ## Limitations
 
