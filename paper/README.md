@@ -18,6 +18,8 @@ paper/
   evidence/
     PHASE_3_PROJECT_LOG.md     Complete experiment record
     phase_03/                 Final aggregate CSV/JSON evidence
+  final/
+    CSE437_Group5_Final_Submission.pdf
   figures/
     phase_02/                 Selected dataset/EDA figures
     phase_03/                 Final robustness figures
@@ -27,6 +29,13 @@ paper/
   sections/                   Modular manuscript sections
   tables/                     Verified LaTeX tables
 ```
+
+## Final report
+
+The submitted report is included directly as
+[CSE437_Group5_Final_Submission.pdf](final/CSE437_Group5_Final_Submission.pdf).
+The shared copy is also available in the
+[Google Drive report folder](https://drive.google.com/drive/u/0/folders/1Rn1jU3xm5COCyapM0ZAD2xBiw-Mx_ndc).
 
 ## Overleaf
 
