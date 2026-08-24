@@ -285,6 +285,9 @@ in [configs/README.md](configs/README.md).
 - a compact final evidence snapshot
 - missing-figure placeholder handling for report work still in progress
 
+The completed final report is available in the
+[project report folder on Google Drive](https://drive.google.com/drive/u/0/folders/1Rn1jU3xm5COCyapM0ZAD2xBiw-Mx_ndc).
+
 The generated Overleaf ZIP is a local packaging artifact and is not committed;
 it can be recreated from the contents of `paper/`.
 
